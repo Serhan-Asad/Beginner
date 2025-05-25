@@ -115,10 +115,7 @@ func pushToGitHub() error {
 		return fmt.Errorf("failed to check for changes: %v", err)
 	}
 
-	if !hasChanges {
-		fmt.Println("No changes to be made. Nothing to commit or push.")
-		return nil
-	}
+	
 
 	// Add all changes
 	cmd = exec.Command("git", "add", ".")
@@ -156,5 +153,6 @@ func main() {
 		fmt.Printf("Failed to push to GitHub and create PR: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("Successfully pushed to GitHub and created PR!")
+	fmt.Println("done")
+	fmt.Println("Press Enter to exit...")
 }
