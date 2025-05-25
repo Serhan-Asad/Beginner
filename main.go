@@ -117,6 +117,7 @@ func pushToGitHub() error {
 
 	if !hasChanges {
 		fmt.Println("No changes to commit. Proceeding with push...")
+		return nil
 	} else {
 		// Add all changes
 		cmd = exec.Command("git", "add", ".")
