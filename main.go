@@ -115,24 +115,21 @@ func pushToGitHub() error {
 		return fmt.Errorf("failed to check for changes: %v", err)
 	}
 
-	if !hasChanges {
-		fmt.Println("No changes to commit. Proceeding with push...")
-		return nil
-	} else {
-		// Add all changes
-		cmd = exec.Command("git", "add", ".")
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to add changes: %v", err)
-		}
+	
 
-		// Commit changes
-		fmt.Println("Committing changes...")
-		cmd = exec.Command("git", "commit", "-m", "Auto-commit by test program")
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to commit changes: %v", err)
-		}
-		fmt.Println("Changes added to commit")
+	// Add all changes
+	cmd = exec.Command("git", "add", ".")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to add changes: %v", err)
 	}
+
+	// Commit changes
+	fmt.Println("Committing changes...")
+	cmd = exec.Command("git", "commit", "-m", "Auto-commit by test program")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit changes: %v", err)
+	}
+	fmt.Println("Changes added to commit")
 
 	// Push to GitHub
 	fmt.Println("Pushing to GitHub...")
@@ -141,14 +138,9 @@ func pushToGitHub() error {
 		return fmt.Errorf("failed to push to GitHub: %v", err)
 	}
 
-	// Only create pull request if not on main branch
-	if branchName != "main" {
-		fmt.Println("Creating pull request...")
-		if err := createPullRequest(branchName); err != nil {
-			return fmt.Errorf("failed to create pull request: %v", err)
-		}
-	} else {
-		fmt.Println("On main branch - skipping pull request creation")
+	// Create pull request
+	if err := createPullRequest(branchName); err != nil {
+		return fmt.Errorf("failed to create pull request: %v", err)
 	}
 
 	return nil
