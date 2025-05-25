@@ -109,6 +109,11 @@ func pushToGitHub() error {
 	branchName := strings.TrimSpace(string(branch))
 	fmt.Printf("Current branch: %s\n", branchName)
 
+	// Check if we're on main branch
+	if branchName != "main" {
+		return fmt.Errorf("pull request can only be created from main branch")
+	}
+
 	// Check if there are any changes
 	hasChanges, err := hasChanges()
 	if err != nil {
