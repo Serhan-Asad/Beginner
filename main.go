@@ -161,5 +161,5 @@ func main() {
 		fmt.Printf("Failed to push to GitHub and create PR: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("Successfully pushed to GitHub and created PR!")
+	fmt.Println("done")
 }
