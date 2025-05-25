@@ -109,11 +109,6 @@ func pushToGitHub() error {
 	branchName := strings.TrimSpace(string(branch))
 	fmt.Printf("Current branch: %s\n", branchName)
 
-	// Check if we're on main branch
-	if branchName != "main" {
-		return fmt.Errorf("pull request can only be created from main branch")
-	}
-
 	// Check if there are any changes
 	hasChanges, err := hasChanges()
 	if err != nil {
@@ -121,7 +116,7 @@ func pushToGitHub() error {
 	}
 
 	if !hasChanges {
-		fmt.Println("No changes to commit. Creating PR with existing commits...")
+		fmt.Println("No changes to commit. Proceeding with push...")
 	} else {
 		// Add all changes
 		cmd = exec.Command("git", "add", ".")
@@ -145,9 +140,14 @@ func pushToGitHub() error {
 		return fmt.Errorf("failed to push to GitHub: %v", err)
 	}
 
-	// Create pull request
-	if err := createPullRequest(branchName); err != nil {
-		return fmt.Errorf("failed to create pull request: %v", err)
+	// Only create pull request if not on main branch
+	if branchName != "main" {
+		fmt.Println("Creating pull request...")
+		if err := createPullRequest(branchName); err != nil {
+			return fmt.Errorf("failed to create pull request: %v", err)
+		}
+	} else {
+		fmt.Println("On main branch - skipping pull request creation")
 	}
 
 	return nil
