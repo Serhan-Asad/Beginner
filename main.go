@@ -130,6 +130,7 @@ func pushToGitHub() error {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to commit changes: %v", err)
 		}
+		fmt.Println("Changes added to commit")
 	}
 
 	// Push to GitHub
