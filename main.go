@@ -156,5 +156,4 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Successfully pushed to GitHub and created PR!")
-	fmt.Println("Press Enter to exit...")
 }
