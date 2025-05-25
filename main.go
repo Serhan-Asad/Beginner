@@ -116,22 +116,23 @@ func pushToGitHub() error {
 	}
 
 	if !hasChanges {
-		fmt.Println("No changes to commit. Proceeding with push...")
-	} else {
-		// Add all changes
-		cmd = exec.Command("git", "add", ".")
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to add changes: %v", err)
-		}
-
-		// Commit changes
-		fmt.Println("Committing changes...")
-		cmd = exec.Command("git", "commit", "-m", "Auto-commit by test program")
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to commit changes: %v", err)
-		}
-		fmt.Println("Changes added to commit")
+		fmt.Println("No changes to commit or push. Exiting...")
+		return nil
 	}
+
+	// Add all changes
+	cmd = exec.Command("git", "add", ".")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to add changes: %v", err)
+	}
+
+	// Commit changes
+	fmt.Println("Committing changes...")
+	cmd = exec.Command("git", "commit", "-m", "Auto-commit by test program")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit changes: %v", err)
+	}
+	fmt.Println("Changes added to commit")
 
 	// Push to GitHub
 	fmt.Println("Pushing to GitHub...")
