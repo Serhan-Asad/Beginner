@@ -162,4 +162,5 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("done")
+	fmt.Println("Press Enter to exit...")
 }
