@@ -161,6 +161,7 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 
 		reviewContent.WriteString("\n" + strings.Repeat("-", 80) + "\n")
 	}
+	fmt.Println(reviewContent.String())
 
 	return reviewContent.String(), nil
 }
