@@ -7,8 +7,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"encoding/base64"
-
 	"github.com/google/go-github/v45/github"
 	"golang.org/x/oauth2"
 )
@@ -120,49 +118,17 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 	}
 
 	var reviewContent strings.Builder
-	reviewContent.WriteString(fmt.Sprintf("Review for PR #%d: %s\n\n", prNumber, *pr.Title))
-	reviewContent.WriteString("Changes:\n")
+	reviewContent.WriteString(fmt.Sprintf("PR #%d: %s\n\n", prNumber, *pr.Title))
 
 	for _, file := range files {
-		reviewContent.WriteString(fmt.Sprintf("\nFile: %s\n", *file.Filename))
-		reviewContent.WriteString(fmt.Sprintf("Additions: %d, Deletions: %d\n", *file.Additions, *file.Deletions))
-
-		// Get the file contents from base branch
-		baseContent, _, _, err := s.client.Repositories.GetContents(s.ctx, s.owner, s.repo, *file.Filename, &github.RepositoryContentGetOptions{
-			Ref: *pr.Base.SHA,
-		})
-		if err == nil && baseContent != nil && baseContent.Content != nil {
-			// Decode base64 content
-			decodedContent, err := base64.StdEncoding.DecodeString(*baseContent.Content)
-			if err == nil {
-				reviewContent.WriteString("\nOriginal Content:\n")
-				reviewContent.WriteString(string(decodedContent))
-			}
-		}
-
-		// Get the file contents from head branch
-		headContent, _, _, err := s.client.Repositories.GetContents(s.ctx, s.owner, s.repo, *file.Filename, &github.RepositoryContentGetOptions{
-			Ref: *pr.Head.SHA,
-		})
-		if err == nil && headContent != nil && headContent.Content != nil {
-			// Decode base64 content
-			decodedContent, err := base64.StdEncoding.DecodeString(*headContent.Content)
-			if err == nil {
-				reviewContent.WriteString("\nNew Content:\n")
-				reviewContent.WriteString(string(decodedContent))
-			}
-		}
-
-		// Add the patch if available
+		reviewContent.WriteString(fmt.Sprintf("File: %s\n", *file.Filename))
 		if file.Patch != nil {
-			reviewContent.WriteString("\nChanges (Patch):\n")
 			reviewContent.WriteString(*file.Patch)
 		}
-
 		reviewContent.WriteString("\n" + strings.Repeat("-", 80) + "\n")
 	}
-	fmt.Println(reviewContent.String())
 
+	fmt.Println(reviewContent.String())
 	return reviewContent.String(), nil
 }
 
