@@ -181,4 +181,5 @@ func main() {
 	}
 
 	githubService.PushChanges()
+	fmt.Println("Push changes completed")
 }
