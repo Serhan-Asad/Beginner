@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/google/go-github/v45/github"
@@ -18,6 +19,8 @@ type GitHubService struct {
 	owner  string
 	repo   string
 }
+
+const prFile = ".last_pr"
 
 // NewGitHubService creates a new GitHub service instance
 func NewGitHubService() (*GitHubService, error) {
@@ -105,8 +108,46 @@ func (s *GitHubService) PushChanges() error {
 	return nil
 }
 
+// getLatestPRForBranch gets the most recent PR for the current branch
+func (s *GitHubService) getLatestPRForBranch(branchName string) (*github.PullRequest, error) {
+	// List PRs for the current branch
+	prs, _, err := s.client.PullRequests.List(s.ctx, s.owner, s.repo, &github.PullRequestListOptions{
+		Head:  fmt.Sprintf("%s:%s", s.owner, branchName),
+		State: "open",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error listing PRs: %v", err)
+	}
+
+	if len(prs) == 0 {
+		return nil, fmt.Errorf("no open PRs found for branch %s", branchName)
+	}
+
+	// Return the most recent PR (first in the list)
+	return prs[0], nil
+}
+
 // ReviewPR reviews a pull request and returns a review comment
 func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
+	// If no PR number provided, try to get it from the stored file
+	if prNumber == 0 {
+		prURL, err := os.ReadFile(prFile)
+		if err != nil {
+			return "", fmt.Errorf("no PR number provided and no stored PR found: %v", err)
+		}
+
+		// Parse PR number from URL
+		parts := strings.Split(string(prURL), "/")
+		if len(parts) < 2 {
+			return "", fmt.Errorf("invalid PR URL format")
+		}
+		prNumber, err = strconv.Atoi(parts[len(parts)-1])
+		if err != nil {
+			return "", fmt.Errorf("invalid PR number in URL: %v", err)
+		}
+		fmt.Printf("Using stored PR #%d\n", prNumber)
+	}
+
 	pr, _, err := s.client.PullRequests.Get(s.ctx, s.owner, s.repo, prNumber)
 	if err != nil {
 		return "", fmt.Errorf("error getting PR: %v", err)
@@ -167,12 +208,19 @@ func (s *GitHubService) createPullRequest(branchName string) error {
 		Base:  github.String("main"),
 	}
 
-	_, _, err := s.client.PullRequests.Create(s.ctx, s.owner, s.repo, pr)
+	newPR, _, err := s.client.PullRequests.Create(s.ctx, s.owner, s.repo, pr)
 	if err != nil {
 		return fmt.Errorf("failed to create pull request: %v", err)
 	}
 
-	fmt.Println("Pull request created successfully!")
+	// Store PR URL in file
+	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", s.owner, s.repo, *newPR.Number)
+	err = os.WriteFile(prFile, []byte(prURL), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to store PR URL: %v", err)
+	}
+
+	fmt.Printf("Pull request created successfully! PR #%d\n", *newPR.Number)
 	return nil
 }
 
@@ -183,8 +231,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	githubService.PushChanges()
-	githubService.ReviewPR(6)
-	fmt.Println("Review PR completed")
-	fmt.Println("testing")
+	// Push changes and create PR
+	err = githubService.PushChanges()
+	if err != nil {
+		fmt.Printf("Error pushing changes: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Review the PR that was just created
+	_, err = githubService.ReviewPR(0) // 0 means use the stored PR
+	if err != nil {
+		fmt.Printf("Error reviewing PR: %v\n", err)
+		os.Exit(1)
+	}
 }
