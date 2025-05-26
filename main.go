@@ -122,10 +122,36 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 	reviewContent.WriteString("Changes:\n")
 
 	for _, file := range files {
-		reviewContent.WriteString(fmt.Sprintf("- %s: %d additions, %d deletions\n",
-			*file.Filename, *file.Additions, *file.Deletions))
+		reviewContent.WriteString(fmt.Sprintf("\nFile: %s\n", *file.Filename))
+		reviewContent.WriteString(fmt.Sprintf("Additions: %d, Deletions: %d\n", *file.Additions, *file.Deletions))
+
+		// Get the file contents from base branch
+		baseContent, _, _, err := s.client.Repositories.GetContents(s.ctx, s.owner, s.repo, *file.Filename, &github.RepositoryContentGetOptions{
+			Ref: *pr.Base.SHA,
+		})
+		if err == nil && baseContent != nil && baseContent.Content != nil {
+			reviewContent.WriteString("\nOriginal Content:\n")
+			reviewContent.WriteString(*baseContent.Content)
+		}
+
+		// Get the file contents from head branch
+		headContent, _, _, err := s.client.Repositories.GetContents(s.ctx, s.owner, s.repo, *file.Filename, &github.RepositoryContentGetOptions{
+			Ref: *pr.Head.SHA,
+		})
+		if err == nil && headContent != nil && headContent.Content != nil {
+			reviewContent.WriteString("\nNew Content:\n")
+			reviewContent.WriteString(*headContent.Content)
+		}
+
+		// Add the patch if available
+		if file.Patch != nil {
+			reviewContent.WriteString("\nChanges (Patch):\n")
+			reviewContent.WriteString(*file.Patch)
+		}
+
+		reviewContent.WriteString("\n" + strings.Repeat("-", 80) + "\n")
 	}
-	fmt.Println(reviewContent.String())
+
 	return reviewContent.String(), nil
 }
 
