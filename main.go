@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"encoding/base64"
+
 	"github.com/google/go-github/v45/github"
 	"golang.org/x/oauth2"
 )
@@ -130,8 +132,12 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 			Ref: *pr.Base.SHA,
 		})
 		if err == nil && baseContent != nil && baseContent.Content != nil {
-			reviewContent.WriteString("\nOriginal Content:\n")
-			reviewContent.WriteString(*baseContent.Content)
+			// Decode base64 content
+			decodedContent, err := base64.StdEncoding.DecodeString(*baseContent.Content)
+			if err == nil {
+				reviewContent.WriteString("\nOriginal Content:\n")
+				reviewContent.WriteString(string(decodedContent))
+			}
 		}
 
 		// Get the file contents from head branch
@@ -139,8 +145,12 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 			Ref: *pr.Head.SHA,
 		})
 		if err == nil && headContent != nil && headContent.Content != nil {
-			reviewContent.WriteString("\nNew Content:\n")
-			reviewContent.WriteString(*headContent.Content)
+			// Decode base64 content
+			decodedContent, err := base64.StdEncoding.DecodeString(*headContent.Content)
+			if err == nil {
+				reviewContent.WriteString("\nNew Content:\n")
+				reviewContent.WriteString(string(decodedContent))
+			}
 		}
 
 		// Add the patch if available
@@ -151,7 +161,7 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 
 		reviewContent.WriteString("\n" + strings.Repeat("-", 80) + "\n")
 	}
-	fmt.Println(reviewContent.String())
+
 	return reviewContent.String(), nil
 }
 
