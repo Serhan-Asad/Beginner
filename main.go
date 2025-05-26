@@ -125,7 +125,7 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 		reviewContent.WriteString(fmt.Sprintf("- %s: %d additions, %d deletions\n",
 			*file.Filename, *file.Additions, *file.Deletions))
 	}
-
+	fmt.Println(reviewContent.String())
 	return reviewContent.String(), nil
 }
 
