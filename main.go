@@ -118,14 +118,17 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 	}
 
 	var reviewContent strings.Builder
-	reviewContent.WriteString(fmt.Sprintf("Review for PR #%d: %s\n\n", prNumber, *pr.Title))
-	reviewContent.WriteString("Changes:\n")
+	reviewContent.WriteString(fmt.Sprintf("PR #%d: %s\n\n", prNumber, *pr.Title))
 
 	for _, file := range files {
-		reviewContent.WriteString(fmt.Sprintf("- %s: %d additions, %d deletions\n",
-			*file.Filename, *file.Additions, *file.Deletions))
+		reviewContent.WriteString(fmt.Sprintf("File: %s\n", *file.Filename))
+		if file.Patch != nil {
+			reviewContent.WriteString(*file.Patch)
+		}
+		reviewContent.WriteString("\n" + strings.Repeat("-", 80) + "\n")
 	}
 
+	fmt.Println(reviewContent.String())
 	return reviewContent.String(), nil
 }
 
@@ -181,4 +184,7 @@ func main() {
 	}
 
 	githubService.PushChanges()
+	githubService.ReviewPR(1)
+	fmt.Println("Review PR completed")
+	fmt.Println("test")
 }
