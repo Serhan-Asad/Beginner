@@ -201,26 +201,88 @@ func (s *GitHubService) commitChanges() error {
 }
 
 func (s *GitHubService) createPullRequest(branchName string) error {
-	pr := &github.NewPullRequest{
-		Title: github.String("Auto PR by GitHub service"),
-		Body:  github.String("This is an automated pull request created by the GitHub service."),
-		Head:  github.String(branchName),
-		Base:  github.String("main"),
+	// First check if a PR already exists for this branch
+	prs, _, err := s.client.PullRequests.List(s.ctx, s.owner, s.repo, &github.PullRequestListOptions{
+		Head:  fmt.Sprintf("%s:%s", s.owner, branchName),
+		State: "open",
+	})
+	if err != nil {
+		return fmt.Errorf("error checking existing PRs: %v", err)
 	}
 
-	newPR, _, err := s.client.PullRequests.Create(s.ctx, s.owner, s.repo, pr)
-	if err != nil {
-		return fmt.Errorf("failed to create pull request: %v", err)
+	var pr *github.PullRequest
+	if len(prs) > 0 {
+		// PR exists, use the existing one
+		pr = prs[0]
+		fmt.Printf("Using existing PR #%d\n", *pr.Number)
+	} else {
+		// Create new PR
+		newPR := &github.NewPullRequest{
+			Title: github.String("Auto PR by GitHub service"),
+			Body:  github.String("This is an automated pull request created by the GitHub service."),
+			Head:  github.String(branchName),
+			Base:  github.String("main"),
+		}
+
+		pr, _, err = s.client.PullRequests.Create(s.ctx, s.owner, s.repo, newPR)
+		if err != nil {
+			return fmt.Errorf("failed to create pull request: %v", err)
+		}
+		fmt.Printf("Created new PR #%d\n", *pr.Number)
 	}
 
 	// Store PR URL in file
-	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", s.owner, s.repo, *newPR.Number)
+	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", s.owner, s.repo, *pr.Number)
 	err = os.WriteFile(prFile, []byte(prURL), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to store PR URL: %v", err)
 	}
 
-	fmt.Printf("Pull request created successfully! PR #%d\n", *newPR.Number)
+	return nil
+}
+
+func (s *GitHubService) pushToGitHub() error {
+	//are we in a git repository?
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("not in a git repository: %v", err)
+	}
+
+	// Get the current branch
+	cmd = exec.Command("git", "branch", "--show-current")
+	branch, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %v", err)
+	}
+	branchName := strings.TrimSpace(string(branch))
+	fmt.Printf("Current branch: %s\n", branchName)
+
+	// Add all changes
+	cmd = exec.Command("git", "add", ".")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to add changes: %v", err)
+	}
+
+	// Commit changes
+	fmt.Println("Committing changes...")
+	cmd = exec.Command("git", "commit", "-m", "Auto-commit by test program")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit changes: %v", err)
+	}
+	fmt.Println("Changes committed successfully")
+
+	// Push to GitHub
+	fmt.Println("Pushing to GitHub...")
+	cmd = exec.Command("git", "push", "origin", branchName)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to push to GitHub: %v", err)
+	}
+
+	// Create or update pull request
+	if err := s.createPullRequest(branchName); err != nil {
+		return fmt.Errorf("failed to create/update pull request: %v", err)
+	}
+
 	return nil
 }
 
