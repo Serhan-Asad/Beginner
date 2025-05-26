@@ -181,5 +181,6 @@ func main() {
 	}
 
 	githubService.PushChanges()
-	fmt.Println("Push changes completed")
+	githubService.ReviewPR(1)
+	fmt.Println("Review PR completed")
 }
