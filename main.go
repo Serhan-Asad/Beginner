@@ -187,4 +187,5 @@ func main() {
 	githubService.ReviewPR(1)
 	fmt.Println("Review PR completed")
 	fmt.Println("test")
+	fmt.Println("test2")
 }
