@@ -283,6 +283,8 @@ func (s *GitHubService) pushToGitHub() error {
 		return fmt.Errorf("failed to create/update pull request: %v", err)
 	}
 
+
+	fmt.Println("Pushed to GitHub and created/updated PR")
 	return nil
 }
 
