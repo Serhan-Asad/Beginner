@@ -12,6 +12,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const prFile = ".last_pr"
+
 // GitHubService handles all GitHub operations
 type GitHubService struct {
 	client *github.Client
@@ -20,8 +22,6 @@ type GitHubService struct {
 	repo   string
 }
 
-const prFile = ".last_pr"
-
 // NewGitHubService creates a new GitHub service instance
 func NewGitHubService() (*GitHubService, error) {
 	token := os.Getenv("GITHUB_TOKEN")
@@ -29,14 +29,11 @@ func NewGitHubService() (*GitHubService, error) {
 		return nil, fmt.Errorf("GITHUB_TOKEN environment variable not set")
 	}
 
-	// Get repository info
-	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
-	repoURL, err := cmd.Output()
+	repoURL, err := exec.Command("git", "config", "--get", "remote.origin.url").Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository URL: %v", err)
 	}
 
-	// Parse repository URL to get owner and repo name
 	parts := strings.Split(strings.TrimSpace(string(repoURL)), "/")
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("invalid repository URL format")
@@ -44,16 +41,12 @@ func NewGitHubService() (*GitHubService, error) {
 	repoName := strings.TrimSuffix(parts[len(parts)-1], ".git")
 	owner := parts[len(parts)-2]
 
-	// Initialize GitHub client
 	ctx := context.Background()
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	)
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(ctx, ts)
-	client := github.NewClient(tc)
 
 	return &GitHubService{
-		client: client,
+		client: github.NewClient(tc),
 		ctx:    ctx,
 		owner:  owner,
 		repo:   repoName,
@@ -62,21 +55,15 @@ func NewGitHubService() (*GitHubService, error) {
 
 // PushChanges pushes changes to GitHub and creates a PR if not on main branch
 func (s *GitHubService) PushChanges() error {
-	// Check if we're in a git repository
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("not in a git repository: %v", err)
+	if err := s.validateGitRepo(); err != nil {
+		return err
 	}
 
-	// Get current branch
-	cmd = exec.Command("git", "branch", "--show-current")
-	branch, err := cmd.Output()
+	branchName, err := s.getCurrentBranch()
 	if err != nil {
-		return fmt.Errorf("failed to get current branch: %v", err)
+		return err
 	}
-	branchName := strings.TrimSpace(string(branch))
 
-	// Check for changes
 	hasChanges, err := s.hasChanges()
 	if err != nil {
 		return err
@@ -87,19 +74,14 @@ func (s *GitHubService) PushChanges() error {
 		return nil
 	}
 
-	// Add and commit changes
 	if err := s.commitChanges(); err != nil {
 		return err
 	}
 
-	// Push to GitHub
-	fmt.Println("Pushing to GitHub...")
-	cmd = exec.Command("git", "push", "origin", branchName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to push to GitHub: %v", err)
+	if err := s.pushToRemote(branchName); err != nil {
+		return err
 	}
 
-	// Create PR if not on main branch
 	if branchName != "main" {
 		return s.createPullRequest(branchName)
 	}
@@ -108,42 +90,13 @@ func (s *GitHubService) PushChanges() error {
 	return nil
 }
 
-// getLatestPRForBranch gets the most recent PR for the current branch
-func (s *GitHubService) getLatestPRForBranch(branchName string) (*github.PullRequest, error) {
-	// List PRs for the current branch
-	prs, _, err := s.client.PullRequests.List(s.ctx, s.owner, s.repo, &github.PullRequestListOptions{
-		Head:  fmt.Sprintf("%s:%s", s.owner, branchName),
-		State: "open",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error listing PRs: %v", err)
-	}
-
-	if len(prs) == 0 {
-		return nil, fmt.Errorf("no open PRs found for branch %s", branchName)
-	}
-
-	// Return the most recent PR (first in the list)
-	return prs[0], nil
-}
-
 // ReviewPR reviews a pull request and returns a review comment
 func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
-	// If no PR number provided, try to get it from the stored file
 	if prNumber == 0 {
-		prURL, err := os.ReadFile(prFile)
+		var err error
+		prNumber, err = s.getStoredPRNumber()
 		if err != nil {
-			return "", fmt.Errorf("no PR number provided and no stored PR found: %v", err)
-		}
-
-		// Parse PR number from URL
-		parts := strings.Split(string(prURL), "/")
-		if len(parts) < 2 {
-			return "", fmt.Errorf("invalid PR URL format")
-		}
-		prNumber, err = strconv.Atoi(parts[len(parts)-1])
-		if err != nil {
-			return "", fmt.Errorf("invalid PR number in URL: %v", err)
+			return "", err
 		}
 		fmt.Printf("Using stored PR #%d\n", prNumber)
 	}
@@ -174,9 +127,23 @@ func (s *GitHubService) ReviewPR(prNumber int) (string, error) {
 }
 
 // Helper functions
+func (s *GitHubService) validateGitRepo() error {
+	if err := exec.Command("git", "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		return fmt.Errorf("not in a git repository: %v", err)
+	}
+	return nil
+}
+
+func (s *GitHubService) getCurrentBranch() (string, error) {
+	branch, err := exec.Command("git", "branch", "--show-current").Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %v", err)
+	}
+	return strings.TrimSpace(string(branch)), nil
+}
+
 func (s *GitHubService) hasChanges() (bool, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
-	output, err := cmd.Output()
+	output, err := exec.Command("git", "status", "--porcelain").Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check git status: %v", err)
 	}
@@ -184,24 +151,45 @@ func (s *GitHubService) hasChanges() (bool, error) {
 }
 
 func (s *GitHubService) commitChanges() error {
-	// Add all changes
-	cmd := exec.Command("git", "add", ".")
-	if err := cmd.Run(); err != nil {
+	if err := exec.Command("git", "add", ".").Run(); err != nil {
 		return fmt.Errorf("failed to add changes: %v", err)
 	}
 
-	// Commit changes
 	fmt.Println("Committing changes...")
-	cmd = exec.Command("git", "commit", "-m", "Auto-commit by GitHub service")
-	if err := cmd.Run(); err != nil {
+	if err := exec.Command("git", "commit", "-m", "Auto-commit by GitHub service").Run(); err != nil {
 		return fmt.Errorf("failed to commit changes: %v", err)
 	}
 	fmt.Println("Changes committed successfully")
 	return nil
 }
 
+func (s *GitHubService) pushToRemote(branchName string) error {
+	fmt.Println("Pushing to GitHub...")
+	if err := exec.Command("git", "push", "origin", branchName).Run(); err != nil {
+		return fmt.Errorf("failed to push to GitHub: %v", err)
+	}
+	return nil
+}
+
+func (s *GitHubService) getStoredPRNumber() (int, error) {
+	prURL, err := os.ReadFile(prFile)
+	if err != nil {
+		return 0, fmt.Errorf("no PR number provided and no stored PR found: %v", err)
+	}
+
+	parts := strings.Split(string(prURL), "/")
+	if len(parts) < 2 {
+		return 0, fmt.Errorf("invalid PR URL format")
+	}
+
+	prNumber, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid PR number in URL: %v", err)
+	}
+	return prNumber, nil
+}
+
 func (s *GitHubService) createPullRequest(branchName string) error {
-	// First check if a PR already exists for this branch
 	prs, _, err := s.client.PullRequests.List(s.ctx, s.owner, s.repo, &github.PullRequestListOptions{
 		Head:  fmt.Sprintf("%s:%s", s.owner, branchName),
 		State: "open",
@@ -212,11 +200,9 @@ func (s *GitHubService) createPullRequest(branchName string) error {
 
 	var pr *github.PullRequest
 	if len(prs) > 0 {
-		// PR exists, use the existing one
 		pr = prs[0]
 		fmt.Printf("Using existing PR #%d\n", *pr.Number)
 	} else {
-		// Create new PR
 		newPR := &github.NewPullRequest{
 			Title: github.String("Auto PR by GitHub service"),
 			Body:  github.String("This is an automated pull request created by the GitHub service."),
@@ -231,60 +217,11 @@ func (s *GitHubService) createPullRequest(branchName string) error {
 		fmt.Printf("Created new PR #%d\n", *pr.Number)
 	}
 
-	// Store PR URL in file
 	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", s.owner, s.repo, *pr.Number)
-	err = os.WriteFile(prFile, []byte(prURL), 0644)
-	if err != nil {
+	if err := os.WriteFile(prFile, []byte(prURL), 0644); err != nil {
 		return fmt.Errorf("failed to store PR URL: %v", err)
 	}
 
-	return nil
-}
-
-func (s *GitHubService) pushToGitHub() error {
-	//are we in a git repository?
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("not in a git repository: %v", err)
-	}
-
-	// Get the current branch
-	cmd = exec.Command("git", "branch", "--show-current")
-	branch, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to get current branch: %v", err)
-	}
-	branchName := strings.TrimSpace(string(branch))
-	fmt.Printf("Current branch: %s\n", branchName)
-
-	// Add all changes
-	cmd = exec.Command("git", "add", ".")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to add changes: %v", err)
-	}
-
-	// Commit changes
-	fmt.Println("Committing changes...")
-	cmd = exec.Command("git", "commit", "-m", "Auto-commit by test program")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to commit changes: %v", err)
-	}
-	fmt.Println("Changes committed successfully")
-
-	// Push to GitHub
-	fmt.Println("Pushing to GitHub...")
-	cmd = exec.Command("git", "push", "origin", branchName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to push to GitHub: %v", err)
-	}
-
-	// Create or update pull request
-	if err := s.createPullRequest(branchName); err != nil {
-		return fmt.Errorf("failed to create/update pull request: %v", err)
-	}
-
-
-	fmt.Println("Pushed to GitHub and created/updated PR")
 	return nil
 }
 
@@ -295,16 +232,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Push changes and create PR
-	err = githubService.PushChanges()
-	if err != nil {
+	if err := githubService.PushChanges(); err != nil {
 		fmt.Printf("Error pushing changes: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Review the PR that was just created
-	_, err = githubService.ReviewPR(0) // 0 means use the stored PR
-	if err != nil {
+	if _, err := githubService.ReviewPR(0); err != nil {
 		fmt.Printf("Error reviewing PR: %v\n", err)
 		os.Exit(1)
 	}
